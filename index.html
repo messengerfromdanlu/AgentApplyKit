@@ -1,0 +1,180 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>AgentApplyKit</title>
+    <link rel="stylesheet" href="./src/styles.css" />
+  </head>
+  <body>
+    <main class="shell">
+      <header class="topbar">
+        <div>
+          <p class="eyebrow">AgentApplyKit</p>
+          <h1>AI 项目申请材料生成工作台</h1>
+        </div>
+        <div class="status-pill" id="engine-status">
+          <span class="pulse"></span>
+          Local Rule Engine
+        </div>
+      </header>
+
+      <section class="workflow" aria-label="Agent workflow">
+        <article class="workflow-step is-active">
+          <span>01</span>
+          <strong>Idea Input</strong>
+          <p>收集项目想法、用户和进展</p>
+        </article>
+        <article class="workflow-step">
+          <span>02</span>
+          <strong>Agent Analysis</strong>
+          <p>提炼痛点、价值和技术路线</p>
+        </article>
+        <article class="workflow-step">
+          <span>03</span>
+          <strong>Grant Narrative</strong>
+          <p>生成活动申请描述和 README</p>
+        </article>
+        <article class="workflow-step">
+          <span>04</span>
+          <strong>Proof Pack</strong>
+          <p>整理截图、录屏和链接材料</p>
+        </article>
+      </section>
+
+      <section class="workspace">
+        <form class="panel input-panel" id="project-form">
+          <div class="panel-heading">
+            <div>
+              <p class="eyebrow">Input</p>
+              <h2>项目素材</h2>
+            </div>
+            <button class="ghost-button" type="button" id="sample-button">填入示例</button>
+          </div>
+
+          <label>
+            项目名称
+            <input id="projectName" name="projectName" value="AgentApplyKit" />
+          </label>
+
+          <label>
+            目标用户
+            <input id="audience" name="audience" value="开发者、学生、个人创作者" />
+          </label>
+
+          <label>
+            项目想法
+            <textarea id="idea" name="idea" rows="5">我想做一个工具，把零散的项目想法整理成活动申请材料，包括项目定位、核心痛点、Agent 工作流、申请描述和证明材料建议。</textarea>
+          </label>
+
+          <label>
+            当前进展
+            <select id="progress" name="progress">
+              <option>已有本地 Web Demo</option>
+              <option>已有脚本原型</option>
+              <option>已有 GitHub 仓库</option>
+              <option>正在验证想法</option>
+            </select>
+          </label>
+
+          <label>
+            申请类型
+            <select id="grantType" name="grantType">
+              <option>模型 Token / API 额度申请</option>
+              <option>AI 开发者计划</option>
+              <option>开源项目展示</option>
+              <option>创业比赛 / Hackathon</option>
+            </select>
+          </label>
+
+          <label>
+            希望突出方向
+            <input id="focus" name="focus" value="Agent 流程、可见演示、快速降低材料准备成本" />
+          </label>
+
+          <label>
+            API 使用计划
+            <textarea id="apiPlan" name="apiPlan" rows="3">后续可接入兼容的模型 API，用于多轮润色、不同申请场景适配和批量材料生成。</textarea>
+          </label>
+
+          <section class="api-box" aria-label="DeepSeek API 设置">
+            <div class="api-title">
+              <div>
+                <p class="eyebrow">API Mode</p>
+                <h3>DeepSeek 增强生成</h3>
+              </div>
+              <span class="api-badge">OpenAI-compatible</span>
+            </div>
+
+            <label>
+              API Key
+              <input id="apiKey" name="apiKey" type="password" autocomplete="off" placeholder="sk-..." />
+            </label>
+
+            <div class="two-column">
+              <label>
+                模型
+                <select id="model" name="model">
+                  <option value="deepseek-v4-flash">deepseek-v4-flash</option>
+                  <option value="deepseek-v4-pro">deepseek-v4-pro</option>
+                  <option value="deepseek-chat">deepseek-chat</option>
+                </select>
+              </label>
+
+              <label>
+                API Base
+                <input id="apiBase" name="apiBase" value="https://api.deepseek.com" />
+              </label>
+            </div>
+
+            <label class="checkbox-row">
+              <input id="rememberKey" name="rememberKey" type="checkbox" />
+              <span>仅在本机浏览器记住 Key</span>
+            </label>
+            <p class="hint">Key 只会发送到本地 Node 服务器，再由本地服务器转发到 DeepSeek；不会写入项目文件。</p>
+          </section>
+
+          <div class="button-row">
+            <button class="primary-button" type="submit">本地生成</button>
+            <button class="accent-button" type="button" id="api-button">DeepSeek 生成</button>
+            <button class="secondary-button" type="reset">重置</button>
+          </div>
+        </form>
+
+        <section class="panel output-panel" aria-live="polite">
+          <div class="panel-heading">
+            <div>
+              <p class="eyebrow">Output</p>
+              <h2>材料包</h2>
+            </div>
+            <div class="score-box">
+              <span id="readiness-score">92</span>
+              <small>readiness</small>
+            </div>
+          </div>
+
+          <div class="tabs" role="tablist" aria-label="输出内容">
+            <button class="tab is-selected" type="button" data-tab="summary">项目定位</button>
+            <button class="tab" type="button" data-tab="workflow">Agent 流程</button>
+            <button class="tab" type="button" data-tab="application">申请文案</button>
+            <button class="tab" type="button" data-tab="readme">README</button>
+            <button class="tab" type="button" data-tab="proof">证明材料</button>
+          </div>
+
+          <article class="result-card" id="result-card">
+            <div id="result-content"></div>
+          </article>
+
+          <div class="button-row">
+            <button class="secondary-button" type="button" id="copy-button">复制当前内容</button>
+            <button class="ghost-button" type="button" id="download-button">下载 Markdown</button>
+          </div>
+
+          <p class="run-meta" id="run-meta">当前输出由本地规则引擎生成。</p>
+        </section>
+      </section>
+    </main>
+
+    <script src="./src/app.js"></script>
+  </body>
+</html>

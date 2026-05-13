@@ -1,0 +1,17 @@
+{
+  "name": "agent-apply-kit",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "node server.mjs",
+    "start": "node server.mjs"
+  },
+  "keywords": [
+    "agent",
+    "grant",
+    "application",
+    "ai-tooling"
+  ],
+  "license": "MIT"
+}
