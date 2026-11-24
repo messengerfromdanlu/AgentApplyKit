@@ -267,26 +267,12 @@ textarea:focus {
 }
 
 .api-title {
-  display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
-  gap: 12px;
   margin-bottom: 14px;
 }
 
 .api-title h3 {
   margin: 0;
   font-size: 18px;
-}
-
-.api-badge {
-  flex: 0 0 auto;
-  border-radius: 999px;
-  background: rgba(44, 95, 131, 0.13);
-  color: var(--blue);
-  padding: 7px 10px;
-  font-size: 12px;
-  font-weight: 900;
 }
 
 .two-column {
@@ -306,6 +292,10 @@ textarea:focus {
   width: 16px;
   height: 16px;
   accent-color: var(--green-dark);
+}
+
+.checkbox-row[hidden] {
+  display: none;
 }
 
 .hint,

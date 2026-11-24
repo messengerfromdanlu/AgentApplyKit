@@ -2,7 +2,7 @@
 
 AgentApplyKit is a small AI/Agent application workspace for turning rough project ideas into structured application materials. It helps developers, students, and individual creators prepare clear project narratives for Token/API quota applications, developer programs, open-source showcases, hackathons, and similar submission scenarios.
 
-The project started as a fast local demo and has now been upgraded with DeepSeek API support so the workflow can be validated with a real model.
+Generate with the built-in rules or choose a cloud or local model to tailor the material to your project.
 
 ## Why This Project Exists
 
@@ -25,7 +25,7 @@ AgentApplyKit converts those scattered inputs into a reusable materials package.
 - Draft a Chinese application paragraph that can be pasted into form fields.
 - Generate a README draft for GitHub publishing.
 - Suggest proof materials such as screenshots, screen recordings, and repository links.
-- Switch between local rule-based generation and DeepSeek API enhanced generation.
+- Switch between local rules and multiple text-generation APIs.
 - Copy the current output or download the full result as Markdown.
 
 ## Generation Modes
@@ -34,11 +34,9 @@ AgentApplyKit converts those scattered inputs into a reusable materials package.
 
 The local mode uses deterministic templates and lightweight rules. It does not require an API key and is useful for stable demonstrations, offline testing, and fallback generation.
 
-### DeepSeek API Enhanced Generation
+### Model API Generation
 
-The API mode calls DeepSeek through a local Node.js proxy. The browser sends the project inputs to the local `/api/generate` endpoint, and the local server forwards the request to DeepSeek's OpenAI-compatible Chat Completions API.
-
-This keeps the frontend simple and avoids hardcoding API keys into the repository.
+The browser sends project inputs to the local `/api/generate` endpoint. The Node.js server adapts the request to OpenAI-compatible Chat Completions, Anthropic Messages, or Gemini GenerateContent and converts the response to the same materials format.
 
 ## Agent Workflow
 
@@ -53,7 +51,7 @@ This keeps the frontend simple and avoids hardcoding API keys into the repositor
 - Frontend: HTML, CSS, JavaScript
 - Local server: Node.js HTTP server
 - Local generation: rule engine plus structured templates
-- API generation: local `/api/generate` proxy to DeepSeek Chat Completions
+- API generation: OpenAI-compatible, Anthropic, and Gemini requests through the local Node.js server
 - Dependencies: zero third-party runtime dependencies
 
 ## Project Structure
@@ -64,62 +62,66 @@ AgentApplyKit/
   package.json
   README.md
   server.mjs
+  model-api.mjs
   src/
     app.js
+    model-providers.js
     styles.css
+  test/
+    model-api.test.mjs
 ```
 
 ## Quick Start
+
+Use Node.js 22 or later.
 
 ```bash
 cd AgentApplyKit
 npm run dev
 ```
 
-Open:
+Open the local workspace.
 
 ```text
 http://localhost:5173
 ```
 
-## Using DeepSeek API
+## Using Model APIs
 
-You can use the page directly:
+1. Fill in your project materials and select a service under **模型服务**.
+2. Keep the suggested model ID or enter one available to your account or local server.
+3. Enter the API Key for the selected service if authentication is required.
+4. Click **模型 API 生成**. The result shows which service and model generated the materials.
 
-1. Start the local server.
-2. Open `http://localhost:5173`.
-3. Fill in your project materials.
-4. Enter your DeepSeek API Key in the API section.
-5. Click `DeepSeek 生成`.
+| Service | Suggested model ID | API Key environment variable |
+| --- | --- | --- |
+| [DeepSeek](https://api-docs.deepseek.com/) | `deepseek-flash` | `DEEPSEEK_API_KEY` |
+| [OpenAI](https://developers.openai.com/api/docs/models) | `gpt-5-mini` | `OPENAI_API_KEY` |
+| [Anthropic Claude](https://platform.claude.com/docs/en/models/overview) | `claude-haiku-5-5` | `ANTHROPIC_API_KEY` |
+| [Google Gemini](https://ai.google.dev/gemini-api/docs/models) | `gemini-3.5-flash-lite` | `GEMINI_API_KEY` |
+| [OpenRouter](https://openrouter.ai/docs/quickstart) | `openai/gpt-5-mini` | `OPENROUTER_API_KEY` |
+| [Ollama](https://docs.ollama.com/api/openai-compatibility) | A model installed in Ollama | Optional key in the page |
+| [LM Studio](https://lmstudio.ai/docs/developer/openai-compat) | A model available on the LM Studio server | Optional key in the page |
+| Custom OpenAI-compatible | A text model ID from the service | Enter the service's key in the page |
 
-You can also provide the key through an environment variable.
-
-PowerShell:
+To use an environment variable, set it before starting the server. For example, in PowerShell you can configure DeepSeek.
 
 ```powershell
 $env:DEEPSEEK_API_KEY="sk-your-key"
 npm run dev
 ```
 
-macOS / Linux:
+On macOS and Linux, set the variable inline.
 
 ```bash
 DEEPSEEK_API_KEY="sk-your-key" npm run dev
 ```
 
-Default API Base:
+### Custom and Local Services
 
-```text
-https://api.deepseek.com
-```
-
-Default model:
-
-```text
-deepseek-v4-flash
-```
-
-The UI also includes `deepseek-v4-pro` and `deepseek-chat` as selectable options for compatibility with different account or documentation versions.
+- Choose **自定义 OpenAI 兼容** for any service that accepts standard Chat Completions requests with Bearer authentication, such as [Alibaba Cloud Model Studio](https://www.alibabacloud.com/help/en/model-studio/compatibility-of-openai-with-dashscope) for Qwen. Use the Base URL for your account and region and the service's exact model ID. A full URL ending in `/chat/completions` also works.
+- Start the local model server before generating. Ollama defaults to `http://127.0.0.1:11434/v1` and LM Studio to `http://127.0.0.1:1234/v1`. Change the port if your server uses another one. Leave the key blank if your local server does not require authentication.
+- Remote services use HTTPS. HTTP is available for loopback addresses.
 
 ## Example Input
 
@@ -127,7 +129,7 @@ The UI also includes `deepseek-v4-pro` and `deepseek-chat` as selectable options
 Project name: AgentApplyKit
 Target users: Developers, students, individual creators
 Idea: Turn rough project ideas into structured application materials, including project position, pain points, Agent workflow, application copy, README draft, and proof-material suggestions.
-Progress: Local Web Demo with DeepSeek API validation
+Progress: Local Web Demo with model API generation
 Application type: Model Token / API quota application
 Focus: Agent workflow, visible demo, faster application preparation
 ```
@@ -139,7 +141,7 @@ Focus: Agent workflow, visible demo, faster application preparation
 ## Proof Materials for Application Review
 
 - Home page screenshot showing the input panel, output panel, Agent workflow, and API mode.
-- Short screen recording showing local generation and DeepSeek API enhanced generation.
+- Short screen recording showing local generation and model API generation.
 - Screenshot of the generated application copy.
 - Screenshot of the generated README draft.
 - GitHub repository link showing source code, project structure, and running instructions.
@@ -148,17 +150,13 @@ Focus: Agent workflow, visible demo, faster application preparation
 
 - Do not commit real API keys.
 - Do not paste real API keys into README, issues, screenshots, or commit messages.
-- If `remember key` is enabled, the key is stored only in the current browser's `localStorage`.
-- The key is sent from the browser to the local Node.js server, then forwarded to DeepSeek.
+- If you choose to remember a key for a built-in cloud service, it is stored in this browser's `localStorage` under that service's name.
+- Online generation sends the project inputs and the selected key to the configured model service. Environment keys are used only with the corresponding service's preset URL.
 - Before publishing publicly, check that no `.env`, logs, generated Markdown, or screenshots contain secrets.
 
-## Validation Status
+## Tests
 
-- Local syntax check passes for `src/app.js`.
-- Local syntax check passes for `server.mjs`.
-- Static files can be served through the local Node server.
-- `/api/generate` returns a clear error when no API key is provided.
-- DeepSeek API mode has been manually tested by the project owner.
+Run `npm test` to check the three API protocols, response parsing, and key routing against mock responses. The tests run without service accounts or API keys.
 
 ## Future Work
 
