@@ -1,6 +1,7 @@
 import { createReadStream, existsSync, statSync } from "node:fs";
 import { extname, join, normalize, resolve } from "node:path";
 import { createServer } from "node:http";
+import { generateWithModel, ModelApiError } from "./model-api.mjs";
 
 const root = resolve(".");
 const port = Number(process.env.PORT || 5173);
@@ -40,7 +41,8 @@ function buildPrompt(input) {
 3. 强调项目已经有可见 Demo、Agent 工作流、证明材料和后续 API 扩展价值。
 4. applicationCopy 需要 180-280 个中文字符，适合直接填入申请表。
 5. readmeDraft 使用 Markdown。
-6. 只返回 JSON，不要返回 Markdown 代码块。
+6. readinessScore 使用 0 到 100 的数字。
+7. 只返回 JSON，不要返回 Markdown 代码块。
 
 JSON 格式：
 {
@@ -56,7 +58,7 @@ JSON 格式：
   "applicationCopy": "申请表可用文案",
   "readmeDraft": "# 项目名\\n\\nREADME 草稿",
   "proofMaterials": ["证明材料 1", "证明材料 2", "证明材料 3", "证明材料 4"],
-  "readinessScore": 0-100,
+  "readinessScore": 85,
   "improvementNotes": ["改进建议 1", "改进建议 2"]
 }
 
@@ -70,81 +72,29 @@ JSON 格式：
 - API 使用计划：${input.apiPlan || ""}`;
 }
 
-function parseJsonContent(content) {
-  const trimmed = String(content || "").trim();
-  if (!trimmed) throw new Error("模型没有返回内容");
-
-  try {
-    return JSON.parse(trimmed);
-  } catch {
-    const match = trimmed.match(/\{[\s\S]*\}/);
-    if (!match) throw new Error("模型返回内容不是有效 JSON");
-    return JSON.parse(match[0]);
-  }
-}
-
 async function handleGenerate(request, response) {
+  const { host, origin } = request.headers;
+  if (!/^(localhost|127\.0\.0\.1)(:\d+)?$/i.test(host || "") || (origin && origin !== `http://${host}`)) {
+    sendJson(response, 403, { error: "请从本机的 AgentApplyKit 页面发起模型请求。" });
+    return;
+  }
+
   try {
     const body = await readJson(request);
-    const input = body.input || {};
-    const apiKey = String(body.apiKey || process.env.DEEPSEEK_API_KEY || "").trim();
-    const model = String(body.model || "deepseek-v4-flash").trim();
-    const apiBase = String(body.apiBase || "https://api.deepseek.com").replace(/\/+$/, "");
-
-    if (!apiKey) {
-      sendJson(response, 400, { error: "请先填写 DeepSeek API Key，或设置 DEEPSEEK_API_KEY 环境变量。" });
+    if (!body || typeof body !== "object" || Array.isArray(body)) {
+      sendJson(response, 400, { error: "请发送 JSON 对象。" });
       return;
     }
-
-    const apiResponse = await fetch(`${apiBase}/chat/completions`, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        Authorization: `Bearer ${apiKey}`,
-      },
-      body: JSON.stringify({
-        model,
-        messages: [
-          {
-            role: "system",
-            content: "你擅长把 AI/Agent 项目整理成可信、具体、可提交的申请材料。输出必须是严格 JSON。",
-          },
-          {
-            role: "user",
-            content: buildPrompt(input),
-          },
-        ],
-        thinking: { type: "disabled" },
-        response_format: { type: "json_object" },
-        temperature: 0.35,
-        max_tokens: 2800,
-      }),
-    });
-
-    const raw = await apiResponse.text();
-    let payload;
-    try {
-      payload = JSON.parse(raw);
-    } catch {
-      payload = { error: { message: raw } };
-    }
-
-    if (!apiResponse.ok) {
-      sendJson(response, apiResponse.status, {
-        error: payload?.error?.message || `DeepSeek API 请求失败，状态码 ${apiResponse.status}`,
-      });
-      return;
-    }
-
-    const content = payload?.choices?.[0]?.message?.content;
-    const result = parseJsonContent(content);
-    sendJson(response, 200, {
-      model,
-      result,
-      usage: payload.usage || null,
-    });
+    const result = await generateWithModel(body, buildPrompt(body.input || {}));
+    sendJson(response, 200, result);
   } catch (error) {
-    sendJson(response, 500, { error: error.message || "服务器生成失败" });
+    if (error instanceof ModelApiError) {
+      sendJson(response, error.status, { error: error.message });
+    } else if (error instanceof SyntaxError) {
+      sendJson(response, 400, { error: "请求中包含无效的 JSON。" });
+    } else {
+      sendJson(response, 500, { error: "服务器生成失败。" });
+    }
   }
 }
 
@@ -162,6 +112,6 @@ const server = createServer((request, response) => {
   createReadStream(target).pipe(response);
 });
 
-server.listen(port, () => {
-  console.log(`AgentApplyKit is running at http://localhost:${port}`);
+server.listen(port, "127.0.0.1", () => {
+  console.log(`AgentApplyKit is running at http://localhost:${server.address().port}`);
 });

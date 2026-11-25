@@ -1,3 +1,5 @@
+import { defaultProvider, providers } from "./model-providers.js";
+
 const form = document.querySelector("#project-form");
 const resultContent = document.querySelector("#result-content");
 const score = document.querySelector("#readiness-score");
@@ -7,7 +9,17 @@ const sampleButton = document.querySelector("#sample-button");
 const apiButton = document.querySelector("#api-button");
 const engineStatus = document.querySelector("#engine-status");
 const runMeta = document.querySelector("#run-meta");
+const rememberKeyRow = document.querySelector("#remember-key-row");
+const apiHint = document.querySelector("#api-hint");
 const tabs = [...document.querySelectorAll(".tab")];
+const {
+  provider: providerField,
+  model: modelField,
+  apiBase: apiBaseField,
+  apiKey: apiKeyField,
+  rememberKey: rememberKeyField,
+} = form.elements;
+let pendingGeneration;
 
 const state = {
   activeTab: "summary",
@@ -124,7 +136,7 @@ function normalizeGenerated(data) {
   return {
     projectPosition: clean(data.projectPosition, "暂未生成项目定位。"),
     painPoints: Array.isArray(data.painPoints) ? data.painPoints : [],
-    agentWorkflow: Array.isArray(data.agentWorkflow) ? data.agentWorkflow : [],
+    agentWorkflow: Array.isArray(data.agentWorkflow) ? data.agentWorkflow.filter(Boolean) : [],
     applicationCopy: clean(data.applicationCopy, "暂未生成申请文案。"),
     readmeDraft: clean(data.readmeDraft, "暂未生成 README 草稿。"),
     proofMaterials: Array.isArray(data.proofMaterials) ? data.proofMaterials : [],
@@ -242,15 +254,17 @@ function commitView(view, meta = {}) {
   resultContent.innerHTML = state.outputs[state.activeTab];
   state.source = meta.source || "local";
 
-  const engineLabel = state.source === "api" ? `DeepSeek API · ${meta.model || "model"}` : "Local Rule Engine";
+  const providerLabel = providers[meta.provider]?.label || "模型 API";
+  const engineLabel = state.source === "api" ? `${providerLabel} · ${meta.model}` : "Local Rule Engine";
   engineStatus.lastChild.textContent = ` ${engineLabel}`;
   runMeta.textContent =
     state.source === "api"
-      ? `当前输出由 DeepSeek API 增强生成。${meta.usage ? `Token 使用：prompt ${meta.usage.prompt_tokens || 0} / completion ${meta.usage.completion_tokens || 0}` : ""}`
+      ? `当前输出由 ${providerLabel} 生成。${meta.usage ? ` Token 输入 ${meta.usage.prompt_tokens ?? "—"} / 输出 ${meta.usage.completion_tokens ?? "—"}` : ""}`
       : "当前输出由本地规则引擎生成。";
 }
 
 function renderLocal() {
+  cancelApiGeneration();
   const generated = localGenerate(getFormData());
   commitView(buildView(generated, { source: "local" }), { source: "local" });
 }
@@ -271,48 +285,84 @@ function showToast(message, type = "ok") {
 
 function setLoading(isLoading) {
   apiButton.disabled = isLoading;
-  apiButton.textContent = isLoading ? "生成中..." : "DeepSeek 生成";
+  apiButton.textContent = isLoading ? "生成中..." : "模型 API 生成";
+}
+
+function cancelApiGeneration() {
+  if (!pendingGeneration) return;
+  pendingGeneration.abort();
+  pendingGeneration = undefined;
+  setLoading(false);
+}
+
+function keyStorageName(provider) {
+  return `agentApplyKit.${provider}Key`;
+}
+
+function updateProviderFields() {
+  cancelApiGeneration();
+  const provider = providerField.value;
+  const preset = providers[provider];
+  modelField.value = preset.model || "";
+  apiBaseField.value = preset.apiBase || "";
+  apiBaseField.readOnly = !preset.editableBase;
+  apiKeyField.value = preset.keyEnv ? (localStorage.getItem(keyStorageName(provider)) || "") : "";
+  rememberKeyField.checked = Boolean(apiKeyField.value);
+  rememberKeyRow.hidden = !preset.keyEnv;
+  if (preset.keyEnv) {
+    apiHint.textContent = `可在此输入 API Key，也可在服务启动前设置 ${preset.keyEnv}。`;
+  } else {
+    apiHint.textContent = "服务需要认证时填写 API Key。本机模型服务通常可以留空。";
+  }
 }
 
 async function generateWithApi() {
-  const input = getFormData();
-  const remember = Boolean(form.elements.rememberKey.checked);
-  const apiKey = clean(input.apiKey, "");
-
-  if (remember && apiKey) {
-    localStorage.setItem("agentApplyKit.deepseekKey", apiKey);
-  } else if (!remember) {
-    localStorage.removeItem("agentApplyKit.deepseekKey");
+  const { provider, apiBase, model, apiKey: enteredKey, rememberKey, ...input } = getFormData();
+  const apiKey = enteredKey.trim();
+  if (!model.trim() || !apiBase.trim()) {
+    showToast("请填写模型 ID 和 API Base。", "error");
+    return;
   }
 
+  const controller = new AbortController();
+  pendingGeneration = controller;
   setLoading(true);
   try {
+    if (providers[provider].keyEnv) {
+      if (rememberKey && apiKey) {
+        localStorage.setItem(keyStorageName(provider), apiKey);
+      } else {
+        localStorage.removeItem(keyStorageName(provider));
+      }
+    }
+
     const response = await fetch("/api/generate", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        input,
-        apiKey,
-        model: clean(input.model, "deepseek-v4-flash"),
-        apiBase: clean(input.apiBase, "https://api.deepseek.com"),
-      }),
+      body: JSON.stringify({ input, provider, apiKey, model: model.trim(), apiBase: apiBase.trim() }),
+      signal: controller.signal,
     });
 
     const payload = await response.json();
     if (!response.ok) {
-      throw new Error(payload.error || "DeepSeek API 请求失败");
+      throw new Error(payload.error || "模型 API 请求失败");
     }
 
-    commitView(buildView(payload.result, { source: "api", model: payload.model }), {
+    if (controller.signal.aborted) return;
+    commitView(buildView(payload.result, { source: "api" }), {
       source: "api",
+      provider: payload.provider,
       model: payload.model,
       usage: payload.usage,
     });
-    showToast("DeepSeek 生成完成");
+    showToast("模型生成完成");
   } catch (error) {
-    showToast(error.message, "error");
+    if (!controller.signal.aborted) showToast(error.message, "error");
   } finally {
-    setLoading(false);
+    if (pendingGeneration === controller) {
+      pendingGeneration = undefined;
+      setLoading(false);
+    }
   }
 }
 
@@ -342,14 +392,6 @@ function fillSample() {
   showToast("已填入示例项目");
 }
 
-function restoreKey() {
-  const savedKey = localStorage.getItem("agentApplyKit.deepseekKey");
-  if (savedKey) {
-    form.elements.apiKey.value = savedKey;
-    form.elements.rememberKey.checked = true;
-  }
-}
-
 form.addEventListener("submit", (event) => {
   event.preventDefault();
   renderLocal();
@@ -357,7 +399,10 @@ form.addEventListener("submit", (event) => {
 });
 
 form.addEventListener("reset", () => {
-  window.setTimeout(renderLocal, 0);
+  window.setTimeout(() => {
+    updateProviderFields();
+    renderLocal();
+  }, 0);
 });
 
 tabs.forEach((tab) => {
@@ -368,6 +413,10 @@ copyButton.addEventListener("click", copyCurrent);
 downloadButton.addEventListener("click", downloadMarkdown);
 sampleButton.addEventListener("click", fillSample);
 apiButton.addEventListener("click", generateWithApi);
+providerField.addEventListener("change", updateProviderFields);
 
-restoreKey();
+for (const [id, preset] of Object.entries(providers)) {
+  providerField.add(new Option(preset.label, id, id === defaultProvider, id === defaultProvider));
+}
+updateProviderFields();
 renderLocal();
